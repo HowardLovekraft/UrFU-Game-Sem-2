@@ -1,0 +1,12 @@
+[project]
+name = "Blind-Walk"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "pygame>=2.6.1",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3.5",
+]
