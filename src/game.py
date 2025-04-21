@@ -1,7 +1,29 @@
 from dataclasses import dataclass
 
 import pygame
+import random
 import sys
+
+
+@dataclass(frozen=True, slots=True)
+class Display:
+    x: int
+    y: int
+    fps: int
+
+
+@dataclass(frozen=True, slots=True)
+class OutOfBoundsChecks:
+    """
+    Container for results of out-of-bounds checks.
+    """
+    x_pos: bool
+    x_neg: bool
+    y_pos: bool
+    y_neg: bool
+
+    def generally(self) -> bool:
+        return self.x_pos and self.x_neg and self.y_pos and self.y_neg
 
 
 class Pedestrian(pygame.Rect):
@@ -32,11 +54,13 @@ class BlindPerson(pygame.Rect):
         return super().colliderect(x, y, x_size, y_size)
 
 
-@dataclass(frozen=True, slots=True)
-class Display:
-    x: int
-    y: int
-    fps: int
+def check_outofbounds(x: int, y: int, display) -> OutOfBoundsChecks:
+    return OutOfBoundsChecks(
+        x < display.x - CELL_SIZE,
+        x > 0,
+        y < display.y - CELL_SIZE,
+        y > 0
+    )
 
 
 CELL_SIZE = 32
@@ -67,28 +91,33 @@ def main():
                 sys.exit()
 
             elif event.type == pygame.KEYDOWN:
-                
-                # перемещение без выхода в out-of-bounds
-                if event.key == pygame.K_w and player.y > 0:
+                player_out_of_bounds = check_outofbounds(player.x, player.y, DISPLAY)
+
+                # Moving w/o falling in out-of-bounds
+                if event.key == pygame.K_w and player_out_of_bounds.y_neg:
                     player.move_ip(0, -CELL_SIZE)
-                elif event.key == pygame.K_a and player.x > 0:
+                elif event.key == pygame.K_a and player_out_of_bounds.x_neg:
                     player.move_ip(-CELL_SIZE, 0)
-                elif event.key == pygame.K_d and player.x < DISPLAY.x - CELL_SIZE:
+                elif event.key == pygame.K_d and player_out_of_bounds.x_pos:
                     player.move_ip(CELL_SIZE, 0)
-                elif event.key == pygame.K_s and player.y < DISPLAY.y - CELL_SIZE:
+                elif event.key == pygame.K_s and player_out_of_bounds.y_pos:
                     player.move_ip(0, CELL_SIZE)
 
-        if player.hits_pedestrian(pedestrian.left, pedestrian.top,
-                                  pedestrian.width, pedestrian.height):
+        
+        if (
+            player.hits_pedestrian(pedestrian.left, pedestrian.top,
+                                   pedestrian.width, pedestrian.height) and
+            1
+        ):
             player.move_ip(-CELL_SIZE, CELL_SIZE*2)
         
 
-        # Рендеринг
+        # Rendering
         screen.fill((0, 0, 0))
         pygame.draw.rect(screen, (0, 255, 0), player)
         pygame.draw.rect(screen, (255, 0, 0), pedestrian)
 
-        # Обновление экрана
+        # Screen update
         pygame.display.flip()
 
 
