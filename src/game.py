@@ -54,14 +54,20 @@ class BlindPerson(pygame.Rect):
         return super().colliderect(x, y, x_size, y_size)
 
 
-def check_outofbounds(x: int, y: int, display) -> OutOfBoundsChecks:
-    return OutOfBoundsChecks(
-        x < display.x - CELL_SIZE,
-        x > 0,
-        y < display.y - CELL_SIZE,
-        y > 0
-    )
+class NoOutOfBoundsChecker:
+    def __init__(self, display: pygame.display):
+        self.display = display
 
+    def check_movement(self, x: int, y: int) -> OutOfBoundsChecks:
+        return OutOfBoundsChecks(
+            x < self.display.x - CELL_SIZE,
+            x > 0,
+            y < self.display.y - CELL_SIZE,
+            y > 0
+        )
+    
+    def check_pedestrian_hit(self, x: int, y: int) -> OutOfBoundsChecks:
+        pass
 
 CELL_SIZE = 32
 
@@ -76,13 +82,16 @@ def main():
 
     player = BlindPerson(512, 416)
     pedestrian = Pedestrian(256, 128)
+    oob_checker = NoOutOfBoundsChecker(DISPLAY)
 
     while True:
         print(player.x, player.y)  # DEBUG-ONLY
 
         clock.tick(DISPLAY.fps)
-
         pedestrian.move(0, CELL_SIZE)
+        
+        no_oob_after_move = oob_checker.check_movement(player.x, player.y)
+        no_oob_after_hit = oob_checker.check_pedestrian_hit(player.x, player.y)
 
         for event in pygame.event.get():
 
@@ -91,26 +100,35 @@ def main():
                 sys.exit()
 
             elif event.type == pygame.KEYDOWN:
-                player_out_of_bounds = check_outofbounds(player.x, player.y, DISPLAY)
-
                 # Moving w/o falling in out-of-bounds
-                if event.key == pygame.K_w and player_out_of_bounds.y_neg:
+                if event.key == pygame.K_w and no_oob_after_move.y_neg:
                     player.move_ip(0, -CELL_SIZE)
-                elif event.key == pygame.K_a and player_out_of_bounds.x_neg:
+                elif event.key == pygame.K_a and no_oob_after_move.x_neg:
                     player.move_ip(-CELL_SIZE, 0)
-                elif event.key == pygame.K_d and player_out_of_bounds.x_pos:
+                elif event.key == pygame.K_d and no_oob_after_move.x_pos:
                     player.move_ip(CELL_SIZE, 0)
-                elif event.key == pygame.K_s and player_out_of_bounds.y_pos:
+                elif event.key == pygame.K_s and no_oob_after_move.y_pos:
                     player.move_ip(0, CELL_SIZE)
 
         
-        if (
-            player.hits_pedestrian(pedestrian.left, pedestrian.top,
-                                   pedestrian.width, pedestrian.height) and
-            1
-        ):
-            player.move_ip(-CELL_SIZE, CELL_SIZE*2)
-        
+        if player.hits_pedestrian(pedestrian.left, pedestrian.top,
+                                   pedestrian.width, pedestrian.height):
+            pos_for_punch: list[tuple[int, int]] = []
+            for x, y in ((-1, 2), (-2, 1), (1, 2), (2, 1)):
+                no_obb_after_punch = oob_checker.check_movement(player.x + CELL_SIZE * x,
+                                                                player.y + CELL_SIZE * y)
+                print(no_obb_after_punch)
+                if (
+                    no_obb_after_punch.x_neg and no_obb_after_punch.x_pos and
+                    no_obb_after_punch.y_pos
+                ):
+                    pos_for_punch.append((x * CELL_SIZE, y * CELL_SIZE))
+
+            if len(pos_for_punch) == 0:
+                pos_for_punch.append((0, 0))
+            coords = random.choice(pos_for_punch)
+            player.move_ip(*coords)
+
 
         # Rendering
         screen.fill((0, 0, 0))
