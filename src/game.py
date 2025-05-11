@@ -1,4 +1,6 @@
 from dataclasses import dataclass
+from icecream import ic
+
 
 import pygame
 import random
@@ -13,7 +15,7 @@ class Display:
 
 
 @dataclass(frozen=True, slots=True)
-class OutOfBoundsChecks:
+class NoOutOfBoundsChecks:
     """
     Container for results of out-of-bounds checks.
     """
@@ -46,28 +48,35 @@ class Pedestrian(pygame.Rect):
             self.cnt = 0
 
 
+class PhysicalObject(pygame.Rect):
+    def __init__(self, x: int, y: int) -> None:
+        super().__init__(x, y, CELL_SIZE, CELL_SIZE)
+
+
+
 class BlindPerson(pygame.Rect):
     def __init__(self, x: int, y: int) -> None:
         super().__init__(x, y, CELL_SIZE, CELL_SIZE)
 
-    def hits_pedestrian(self, x: int, y: int, x_size: int, y_size: int) -> bool:
-        return super().colliderect(x, y, x_size, y_size)
+    def hits_object(self, x: int, y: int) -> bool:
+        return super().colliderect(x, y, CELL_SIZE, CELL_SIZE)
+    
+    def hits_objectlist(self, walls: list[pygame.Rect]) -> bool:
+        is_collide = super().collidelist(walls)
+        return False if is_collide == -1 else True
 
 
 class NoOutOfBoundsChecker:
     def __init__(self, display: pygame.display):
         self.display = display
 
-    def check_movement(self, x: int, y: int) -> OutOfBoundsChecks:
-        return OutOfBoundsChecks(
+    def check_movement(self, x: int, y: int) -> NoOutOfBoundsChecks:
+        return NoOutOfBoundsChecks(
             x < self.display.x - CELL_SIZE,
             x > 0,
             y < self.display.y - CELL_SIZE,
             y > 0
         )
-    
-    def check_pedestrian_hit(self, x: int, y: int) -> OutOfBoundsChecks:
-        pass
 
 CELL_SIZE = 32
 
@@ -82,6 +91,17 @@ def main():
 
     player = BlindPerson(512, 416)
     pedestrian = Pedestrian(256, 128)
+
+    wall_coords: list[tuple[int, int]] = [(128, 128), (96, 128), (256, 256)]
+    walls: list[PhysicalObject] = [PhysicalObject(x, y) for (x, y) in wall_coords]
+
+    walls_upped = [PhysicalObject(x, y+CELL_SIZE) for (x, y) in wall_coords]
+    walls_lefted = [PhysicalObject(x+CELL_SIZE, y) for (x, y) in wall_coords]
+    walls_righted = [PhysicalObject(x-CELL_SIZE, y) for (x, y) in wall_coords]
+    walls_downed = [PhysicalObject(x, y-CELL_SIZE) for (x, y) in wall_coords]
+
+    ic(walls, wall_coords, walls_upped)
+
     oob_checker = NoOutOfBoundsChecker(DISPLAY)
 
     while True:
@@ -91,8 +111,6 @@ def main():
         pedestrian.move(0, CELL_SIZE)
         
         no_oob_after_move = oob_checker.check_movement(player.x, player.y)
-        no_oob_after_hit = oob_checker.check_pedestrian_hit(player.x, player.y)
-
         for event in pygame.event.get():
 
             if event.type == pygame.QUIT:
@@ -100,40 +118,51 @@ def main():
                 sys.exit()
 
             elif event.type == pygame.KEYDOWN:
-                # Moving w/o falling in out-of-bounds
-                if event.key == pygame.K_w and no_oob_after_move.y_neg:
+                # Moving w/o falling in out-of-bounds and collisions w/ objects
+                if all(
+                    (event.key == pygame.K_w, no_oob_after_move.y_neg, 
+                     not player.hits_objectlist(walls_upped))
+                ):
                     player.move_ip(0, -CELL_SIZE)
-                elif event.key == pygame.K_a and no_oob_after_move.x_neg:
+                elif all(
+                    (event.key == pygame.K_a, no_oob_after_move.x_neg,
+                    not player.hits_objectlist(walls_lefted))
+                ):
                     player.move_ip(-CELL_SIZE, 0)
-                elif event.key == pygame.K_d and no_oob_after_move.x_pos:
+                elif all(
+                    (event.key == pygame.K_d, no_oob_after_move.x_pos,
+                    not player.hits_objectlist(walls_righted))
+                ):
                     player.move_ip(CELL_SIZE, 0)
-                elif event.key == pygame.K_s and no_oob_after_move.y_pos:
+                elif all(
+                    (event.key == pygame.K_s, no_oob_after_move.y_pos,
+                    not player.hits_objectlist(walls_downed))
+                ):
                     player.move_ip(0, CELL_SIZE)
 
-        
-        if player.hits_pedestrian(pedestrian.left, pedestrian.top,
-                                   pedestrian.width, pedestrian.height):
+        # Толчок прохожего при столкновении игрока с ним
+        if player.hits_object(pedestrian.left, pedestrian.top):
             pos_for_punch: list[tuple[int, int]] = []
             for x, y in ((-1, 2), (-2, 1), (1, 2), (2, 1)):
                 no_obb_after_punch = oob_checker.check_movement(player.x + CELL_SIZE * x,
                                                                 player.y + CELL_SIZE * y)
-                print(no_obb_after_punch)
-                if (
-                    no_obb_after_punch.x_neg and no_obb_after_punch.x_pos and
-                    no_obb_after_punch.y_pos
+                if all(
+                    (no_obb_after_punch.x_neg, no_obb_after_punch.x_pos, no_obb_after_punch.y_pos)
                 ):
                     pos_for_punch.append((x * CELL_SIZE, y * CELL_SIZE))
 
             if len(pos_for_punch) == 0:
-                pos_for_punch.append((0, 0))
+                pos_for_punch.append((0, 1))
             coords = random.choice(pos_for_punch)
             player.move_ip(*coords)
-
 
         # Rendering
         screen.fill((0, 0, 0))
         pygame.draw.rect(screen, (0, 255, 0), player)
         pygame.draw.rect(screen, (255, 0, 0), pedestrian)
+        
+        for wall in walls:
+            pygame.draw.rect(screen, (255, 255, 255), wall)
 
         # Screen update
         pygame.display.flip()
