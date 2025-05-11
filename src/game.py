@@ -1,10 +1,11 @@
 from dataclasses import dataclass
-from icecream import ic
-
-
-import pygame
+from enum import Enum
 import random
 import sys
+from typing import Final
+
+from icecream import ic
+import pygame
 
 
 @dataclass(frozen=True, slots=True)
@@ -53,7 +54,6 @@ class PhysicalObject(pygame.Rect):
         super().__init__(x, y, CELL_SIZE, CELL_SIZE)
 
 
-
 class BlindPerson(pygame.Rect):
     def __init__(self, x: int, y: int) -> None:
         super().__init__(x, y, CELL_SIZE, CELL_SIZE)
@@ -72,13 +72,19 @@ class NoOutOfBoundsChecker:
 
     def check_movement(self, x: int, y: int) -> NoOutOfBoundsChecks:
         return NoOutOfBoundsChecks(
-            x < self.display.x - CELL_SIZE,
-            x > 0,
-            y < self.display.y - CELL_SIZE,
-            y > 0
+            x < self.display.x - CELL_SIZE, x > 0,
+            y < self.display.y - CELL_SIZE, y > 0
         )
+    
 
-CELL_SIZE = 32
+class Color(Enum):
+    WHITE = (255, 255, 255)
+    BLACK = (0, 0, 0)
+    RED = (255, 0, 0)
+    GREEN = (0, 255, 0)
+
+
+CELL_SIZE: Final[int] = 32
 
 
 def main():
@@ -86,33 +92,31 @@ def main():
     DISPLAY = Display(640, 480, 30)
     screen = pygame.display.set_mode((DISPLAY.x, DISPLAY.y))
     clock = pygame.time.Clock()
+    oob_checker = NoOutOfBoundsChecker(DISPLAY)
 
     Pedestrian.set_fps(DISPLAY.fps)
 
     player = BlindPerson(512, 416)
-    pedestrian = Pedestrian(256, 128)
+    pedestrian_01 = Pedestrian(256, 128)
+    pedestrians: tuple[Pedestrian] = (pedestrian_01, )
 
-    wall_coords: list[tuple[int, int]] = [(128, 128), (96, 128), (256, 256)]
-    walls: list[PhysicalObject] = [PhysicalObject(x, y) for (x, y) in wall_coords]
-
-    walls_upped = [PhysicalObject(x, y+CELL_SIZE) for (x, y) in wall_coords]
-    walls_lefted = [PhysicalObject(x+CELL_SIZE, y) for (x, y) in wall_coords]
-    walls_righted = [PhysicalObject(x-CELL_SIZE, y) for (x, y) in wall_coords]
-    walls_downed = [PhysicalObject(x, y-CELL_SIZE) for (x, y) in wall_coords]
-
-    ic(walls, wall_coords, walls_upped)
-
-    oob_checker = NoOutOfBoundsChecker(DISPLAY)
+    wall_coords: tuple[tuple[int, int], ...] = (
+        (128, 128), (96, 128), (256, 256)
+    )
+    walls: tuple[PhysicalObject, ...] = tuple(PhysicalObject(x, y) for (x, y) in wall_coords)
+    walls_upped = tuple(PhysicalObject(x, y+CELL_SIZE) for (x, y) in wall_coords)
+    walls_lefted = tuple(PhysicalObject(x+CELL_SIZE, y) for (x, y) in wall_coords)
+    walls_righted = tuple(PhysicalObject(x-CELL_SIZE, y) for (x, y) in wall_coords)
+    walls_downed = tuple(PhysicalObject(x, y-CELL_SIZE) for (x, y) in wall_coords)
 
     while True:
         print(player.x, player.y)  # DEBUG-ONLY
 
         clock.tick(DISPLAY.fps)
-        pedestrian.move(0, CELL_SIZE)
+        pedestrian_01.move(0, CELL_SIZE)
         
         no_oob_after_move = oob_checker.check_movement(player.x, player.y)
         for event in pygame.event.get():
-
             if event.type == pygame.QUIT:
                 pygame.quit()
                 sys.exit()
@@ -141,7 +145,7 @@ def main():
                     player.move_ip(0, CELL_SIZE)
 
         # Толчок прохожего при столкновении игрока с ним
-        if player.hits_object(pedestrian.left, pedestrian.top):
+        if player.hits_object(pedestrian_01.left, pedestrian_01.top):
             pos_for_punch: list[tuple[int, int]] = []
             for x, y in ((-1, 2), (-2, 1), (1, 2), (2, 1)):
                 no_obb_after_punch = oob_checker.check_movement(player.x + CELL_SIZE * x,
@@ -157,12 +161,14 @@ def main():
             player.move_ip(*coords)
 
         # Rendering
-        screen.fill((0, 0, 0))
-        pygame.draw.rect(screen, (0, 255, 0), player)
-        pygame.draw.rect(screen, (255, 0, 0), pedestrian)
+        screen.fill(Color.BLACK.value)
+        pygame.draw.rect(screen, Color.GREEN.value, player)
+        
+        for pedestrian in pedestrians:
+            pygame.draw.rect(screen, Color.RED.value, pedestrian)
         
         for wall in walls:
-            pygame.draw.rect(screen, (255, 255, 255), wall)
+            pygame.draw.rect(screen, Color.WHITE.value, wall)
 
         # Screen update
         pygame.display.flip()
