@@ -2,6 +2,7 @@ from dataclasses import dataclass
 from enum import Enum
 import random
 import sys
+import time
 from typing import Final
 
 from icecream import ic
@@ -36,14 +37,34 @@ class Pedestrian(pygame.Rect):
         try:
             self.__getattribute__('fps')
         except AttributeError:
-            raise Exception("You didn't set field 'fps' for class!")
+            raise Exception("You didn't set field 'fps' for Pedestrians!")
 
     @classmethod
-    def set_fps(cls, fps: int):
+    def set_fps(cls, fps: int) -> None:
         cls.fps = fps
 
     def move(self, x: int, y: int) -> None:
         self.cnt += 1
+        if self.cnt == self.fps:
+            super().move_ip(x, y)
+            self.cnt = 0
+
+
+class Car(pygame.Rect):
+    def __init__(self, x: int, y: int) -> None:
+        self.cnt = 0
+        super().__init__(x, y, CELL_SIZE, 2*CELL_SIZE)
+        try:
+            self.__getattribute__('fps')
+        except AttributeError:
+            raise Exception("You didn't set field 'fps' for Cars!")
+
+    @classmethod
+    def set_fps(cls, fps: int) -> None:
+        cls.fps = fps
+
+    def move(self, x: int, y: int) -> None:
+        self.cnt += 2
         if self.cnt == self.fps:
             super().move_ip(x, y)
             self.cnt = 0
@@ -56,6 +77,7 @@ class PhysicalObject(pygame.Rect):
 
 class BlindPerson(pygame.Rect):
     def __init__(self, x: int, y: int) -> None:
+        self.is_alive = True
         super().__init__(x, y, CELL_SIZE, CELL_SIZE)
 
     def hits_object(self, x: int, y: int) -> bool:
@@ -77,28 +99,37 @@ class NoOutOfBoundsChecker:
         )
     
 
-class Color(Enum):
+class Color(Enum):  # Enum[tuple[int, int, int]]
     WHITE = (255, 255, 255)
     BLACK = (0, 0, 0)
     RED = (255, 0, 0)
     GREEN = (0, 255, 0)
+    LIGHT_RED = (255, 100, 100)
 
 
 CELL_SIZE: Final[int] = 32
+DISPLAY: Final[Display] = Display(640, 480, 30)
 
 
 def main():
     pygame.init()
-    DISPLAY = Display(640, 480, 30)
+    pygame.font.init()
     screen = pygame.display.set_mode((DISPLAY.x, DISPLAY.y))
     clock = pygame.time.Clock()
     oob_checker = NoOutOfBoundsChecker(DISPLAY)
 
+    font_path = pygame.font.match_font('arial')
+    arial_font = pygame.font.Font(font_path, 25)
+
     Pedestrian.set_fps(DISPLAY.fps)
+    Car.set_fps(DISPLAY.fps)
 
     player = BlindPerson(512, 416)
     pedestrian_01 = Pedestrian(256, 128)
     pedestrians: tuple[Pedestrian] = (pedestrian_01, )
+
+    car_01 = Car(320, 256)
+    cars: tuple[Car] = (car_01, )
 
     wall_coords: tuple[tuple[int, int], ...] = (
         (128, 128), (96, 128), (256, 256)
@@ -111,14 +142,17 @@ def main():
 
     while True:
         print(player.x, player.y)  # DEBUG-ONLY
-
         clock.tick(DISPLAY.fps)
+
+        # Bots' movement
         pedestrian_01.move(0, CELL_SIZE)
+        car_01.move(0, CELL_SIZE)
         
         no_oob_after_move = oob_checker.check_movement(player.x, player.y)
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 pygame.quit()
+                pygame.font.quit()
                 sys.exit()
 
             elif event.type == pygame.KEYDOWN:
@@ -159,19 +193,51 @@ def main():
                 pos_for_punch.append((0, 1))
             coords = random.choice(pos_for_punch)
             player.move_ip(*coords)
-
-        # Rendering
-        screen.fill(Color.BLACK.value)
-        pygame.draw.rect(screen, Color.GREEN.value, player)
         
-        for pedestrian in pedestrians:
-            pygame.draw.rect(screen, Color.RED.value, pedestrian)
-        
-        for wall in walls:
-            pygame.draw.rect(screen, Color.WHITE.value, wall)
+        # Перезапуск уровня при столкновении игрока с машиной
+        if player.hits_object(car_01.left, car_01.top):
+            # Kill the player
+            player.is_alive = False
 
-        # Screen update
-        pygame.display.flip()
+            # Render game-over text 
+
+            # Render the 3 second timer before restart
+            TICKS = 3
+            for i in range(TICKS, 0, -1):
+                screen.fill(Color.BLACK.value)
+                game_over_text = arial_font.render('GAME OVER', 1, Color.LIGHT_RED.value)
+                restart_text = arial_font.render('GAME WILL RESTART IN ', 1, Color.LIGHT_RED.value)
+                timer = arial_font.render(str(i), 1, Color.LIGHT_RED.value)
+                screen.blit(game_over_text, (256, 160))
+                screen.blit(restart_text, (224, 192))
+                screen.blit(timer, (500, 192))
+                pygame.display.flip()
+                pygame.time.wait(990)
+
+            # Clean part of memory by quiting pygame
+            pygame.quit()
+            pygame.font.quit()
+
+            # To restart the game I use recursion. :(
+            # I will fix it later.
+            main()  # Rate this pattern from 1 to -255
+
+        if player.is_alive:
+            # Rendering
+            screen.fill(Color.BLACK.value)
+            pygame.draw.rect(screen, Color.GREEN.value, player)
+            
+            for pedestrian in pedestrians:
+                pygame.draw.rect(screen, Color.RED.value, pedestrian)
+
+            for car in cars:
+                pygame.draw.rect(screen, Color.RED.value, car)
+            
+            for wall in walls:
+                pygame.draw.rect(screen, Color.WHITE.value, wall)
+
+            # Screen updatess
+            pygame.display.flip()
 
 
 if __name__ == '__main__':
