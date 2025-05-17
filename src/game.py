@@ -75,6 +75,28 @@ class PhysicalObject(pygame.Rect):
         super().__init__(x, y, CELL_SIZE, CELL_SIZE)
 
 
+class PhysObjectCluster(PhysicalObject):
+    def __init__(self, *coords: tuple[int, int]):
+        self.objects: tuple[PhysicalObject] = tuple(
+            PhysicalObject(x, y) for (x, y) in coords
+        )
+        self.upped: tuple[PhysicalObject] = tuple(
+            PhysicalObject(x, y+CELL_SIZE) for (x, y) in coords
+        )
+        self.lefted: tuple[PhysicalObject] = tuple(
+            PhysicalObject(x+CELL_SIZE, y) for (x, y) in coords
+        )
+        self.righted: tuple[PhysicalObject] = tuple(
+            PhysicalObject(x-CELL_SIZE, y) for (x, y) in coords
+        )
+        self.downed: tuple[PhysicalObject] = tuple(
+            PhysicalObject(x, y-CELL_SIZE) for (x, y) in coords
+        )
+
+    def __iter__(self):
+        return self.objects.__iter__()
+
+
 class BlindPerson(pygame.Rect):
     def __init__(self, x: int, y: int) -> None:
         self.is_alive = True
@@ -112,17 +134,36 @@ DISPLAY: Final[Display] = Display(640, 480, 30)
 
 
 def main():
-    pygame.init()
-    pygame.font.init()
-    screen = pygame.display.set_mode((DISPLAY.x, DISPLAY.y))
-    clock = pygame.time.Clock()
-    oob_checker = NoOutOfBoundsChecker(DISPLAY)
+    def init_global_state() -> None:
+        Pedestrian.set_fps(DISPLAY.fps)
+        Car.set_fps(DISPLAY.fps)
+        pygame.init()
+        pygame.font.init()
+
+    def render_frame() -> None:
+        """Renders the frame."""
+        screen.fill(Color.BLACK.value)
+        pygame.draw.rect(screen, Color.GREEN.value, player)
+        
+        for pedestrian in pedestrians:
+            pygame.draw.rect(screen, Color.RED.value, pedestrian)
+        for car in cars:
+            pygame.draw.rect(screen, Color.RED.value, car)
+        for wall in walls:
+            pygame.draw.rect(screen, Color.WHITE.value, wall)
+
+        # Screen updatess
+        pygame.display.flip()
+
+
+    init_global_state()
 
     font_path = pygame.font.match_font('arial')
     arial_font = pygame.font.Font(font_path, 25)
-
-    Pedestrian.set_fps(DISPLAY.fps)
-    Car.set_fps(DISPLAY.fps)
+    
+    screen = pygame.display.set_mode((DISPLAY.x, DISPLAY.y))
+    clock = pygame.time.Clock()
+    oob_checker = NoOutOfBoundsChecker(DISPLAY)
 
     player = BlindPerson(512, 416)
     pedestrian_01 = Pedestrian(256, 128)
@@ -132,13 +173,11 @@ def main():
     cars: tuple[Car] = (car_01, )
 
     wall_coords: tuple[tuple[int, int], ...] = (
-        (128, 128), (96, 128), (256, 256)
+        *tuple((x, DISPLAY.y-CELL_SIZE) for x in range(352, DISPLAY.x, CELL_SIZE)),
+        *tuple((352, y) for y in range(128, DISPLAY.y, CELL_SIZE)),
+        (128, 128), (96, 128), (256, 256), 
     )
-    walls: tuple[PhysicalObject, ...] = tuple(PhysicalObject(x, y) for (x, y) in wall_coords)
-    walls_upped = tuple(PhysicalObject(x, y+CELL_SIZE) for (x, y) in wall_coords)
-    walls_lefted = tuple(PhysicalObject(x+CELL_SIZE, y) for (x, y) in wall_coords)
-    walls_righted = tuple(PhysicalObject(x-CELL_SIZE, y) for (x, y) in wall_coords)
-    walls_downed = tuple(PhysicalObject(x, y-CELL_SIZE) for (x, y) in wall_coords)
+    walls = PhysObjectCluster(*wall_coords)
 
     while True:
         print(player.x, player.y)  # DEBUG-ONLY
@@ -159,22 +198,22 @@ def main():
                 # Moving w/o falling in out-of-bounds and collisions w/ objects
                 if all(
                     (event.key == pygame.K_w, no_oob_after_move.y_neg, 
-                     not player.hits_objectlist(walls_upped))
+                     not player.hits_objectlist(walls.upped))
                 ):
                     player.move_ip(0, -CELL_SIZE)
                 elif all(
                     (event.key == pygame.K_a, no_oob_after_move.x_neg,
-                    not player.hits_objectlist(walls_lefted))
+                    not player.hits_objectlist(walls.lefted))
                 ):
                     player.move_ip(-CELL_SIZE, 0)
                 elif all(
                     (event.key == pygame.K_d, no_oob_after_move.x_pos,
-                    not player.hits_objectlist(walls_righted))
+                    not player.hits_objectlist(walls.righted))
                 ):
                     player.move_ip(CELL_SIZE, 0)
                 elif all(
                     (event.key == pygame.K_s, no_oob_after_move.y_pos,
-                    not player.hits_objectlist(walls_downed))
+                    not player.hits_objectlist(walls.downed))
                 ):
                     player.move_ip(0, CELL_SIZE)
 
@@ -182,8 +221,8 @@ def main():
         if player.hits_object(pedestrian_01.left, pedestrian_01.top):
             pos_for_punch: list[tuple[int, int]] = []
             for x, y in ((-1, 2), (-2, 1), (1, 2), (2, 1)):
-                no_obb_after_punch = oob_checker.check_movement(player.x + CELL_SIZE * x,
-                                                                player.y + CELL_SIZE * y)
+                no_obb_after_punch = oob_checker.check_movement(player.x + CELL_SIZE*x,
+                                                                player.y + CELL_SIZE*y)
                 if all(
                     (no_obb_after_punch.x_neg, no_obb_after_punch.x_pos, no_obb_after_punch.y_pos)
                 ):
@@ -199,8 +238,6 @@ def main():
             # Kill the player
             player.is_alive = False
 
-            # Render game-over text 
-
             # Render the 3 second timer before restart
             TICKS = 3
             for i in range(TICKS, 0, -1):
@@ -208,7 +245,7 @@ def main():
                 game_over_text = arial_font.render('GAME OVER', 1, Color.LIGHT_RED.value)
                 restart_text = arial_font.render('GAME WILL RESTART IN ', 1, Color.LIGHT_RED.value)
                 timer = arial_font.render(str(i), 1, Color.LIGHT_RED.value)
-                screen.blit(game_over_text, (256, 160))
+                screen.blit(game_over_text, (224, 160))
                 screen.blit(restart_text, (224, 192))
                 screen.blit(timer, (500, 192))
                 pygame.display.flip()
@@ -222,22 +259,8 @@ def main():
             # I will fix it later.
             main()  # Rate this pattern from 1 to -255
 
-        if player.is_alive:
-            # Rendering
-            screen.fill(Color.BLACK.value)
-            pygame.draw.rect(screen, Color.GREEN.value, player)
-            
-            for pedestrian in pedestrians:
-                pygame.draw.rect(screen, Color.RED.value, pedestrian)
-
-            for car in cars:
-                pygame.draw.rect(screen, Color.RED.value, car)
-            
-            for wall in walls:
-                pygame.draw.rect(screen, Color.WHITE.value, wall)
-
-            # Screen updatess
-            pygame.display.flip()
+        if player.is_alive: 
+            render_frame()
 
 
 if __name__ == '__main__':
