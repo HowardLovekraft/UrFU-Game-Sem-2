@@ -142,7 +142,7 @@ def main():
         for wall in walls:
             pygame.draw.rect(screen, Color.WHITE.value, wall)
 
-        # Screen updatess
+        # Screen updates
         pygame.display.flip()
 
     init_global_state()
@@ -158,12 +158,15 @@ def main():
     pedestrian_01 = Pedestrian(256, 128)
     pedestrians = Pedestrians((pedestrian_01, ))
 
-    car_01 = Car(320, 256)
+    car_01 = Car(320, 32)
     cars: tuple[Car] = (car_01, )
 
     wall_coords: tuple[tuple[int, int], ...] = (
         *tuple((x, DISPLAY.y-CELL_SIZE) for x in range(352, DISPLAY.x, CELL_SIZE)),
         *tuple((352, y) for y in range(128, DISPLAY.y, CELL_SIZE)),
+        *tuple((0, y) for y in range(0, DISPLAY.y, CELL_SIZE)),
+        *tuple((160, y) for y in range(128, DISPLAY.y, CELL_SIZE)),
+        *tuple((x, DISPLAY.y-CELL_SIZE) for x in range(0, 160, CELL_SIZE)),
         (128, 128), (96, 128), (256, 256), 
     )
     walls = PhysObjectCluster(*wall_coords)
@@ -171,7 +174,7 @@ def main():
     while True:
         print(player.x, player.y)  # DEBUG-ONLY
         clock.tick(DISPLAY.fps)
-
+        
         # Bots' movement
         pedestrians.move_ip(0, CELL_SIZE)
         car_01.move_ip(0, CELL_SIZE)
@@ -234,9 +237,9 @@ def main():
                 game_over_text = arial_font.render('GAME OVER', 1, Color.LIGHT_RED.value)
                 restart_text = arial_font.render('GAME WILL RESTART IN ', 1, Color.LIGHT_RED.value)
                 timer = arial_font.render(str(i), 1, Color.LIGHT_RED.value)
-                screen.blit(game_over_text, (224, 160))
-                screen.blit(restart_text, (224, 192))
-                screen.blit(timer, (500, 192))
+                screen.blit(game_over_text, (32, 160))
+                screen.blit(restart_text, (32, 192))
+                screen.blit(timer, (288, 192))
                 pygame.display.flip()
                 pygame.time.wait(990)
 
