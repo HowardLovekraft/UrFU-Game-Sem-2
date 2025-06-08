@@ -1,38 +1,17 @@
-from dataclasses import dataclass
-from enum import Enum
 import random
 import sys
 import time
-from typing import Final
+from typing import Final, Iterator, Sequence
 
 from icecream import ic
 import pygame
 
-
-@dataclass(frozen=True, slots=True)
-class Display:
-    x: int
-    y: int
-    fps: int
-
-
-@dataclass(frozen=True, slots=True)
-class NoOutOfBoundsChecks:
-    """
-    Container for results of out-of-bounds checks.
-    """
-    x_pos: bool
-    x_neg: bool
-    y_pos: bool
-    y_neg: bool
-
-    def generally(self) -> bool:
-        return self.x_pos and self.x_neg and self.y_pos and self.y_neg
+from gameclasses import Color, Display, NoOutOfBoundsChecks
 
 
 class Pedestrian(pygame.Rect):
     def __init__(self, x: int, y: int) -> None:
-        self.cnt = 0
+        self.cnt = -1
         super().__init__(x, y, CELL_SIZE, CELL_SIZE)
         try:
             self.__getattribute__('fps')
@@ -47,13 +26,32 @@ class Pedestrian(pygame.Rect):
         self.cnt += 1
         if self.cnt == self.fps:
             super().move_ip(x, y)
-            self.cnt = 0
+            self.cnt = -1
 
+
+class Pedestrians(Pedestrian):
+    def __init__(self, pedestrians: tuple[Pedestrian]):
+        self.pedestrians = pedestrians
+        self.cnt = -1
+        try:
+            self.fps = pedestrians[0].__getattribute__('fps')
+        except AttributeError:
+            raise Exception("You didn't set field 'fps' for Pedestrians!")
+
+    def move_ip(self, x: int, y: int) -> None:
+        self.cnt += 1
+        if self.cnt >= self.fps:
+            for ped in self.pedestrians:
+                ped.move_ip(x, y)
+            self.cnt = -1
+
+    def __iter__(self) -> Iterator[Pedestrian]:
+        return self.pedestrians.__iter__()
 
 class Car(pygame.Rect):
     def __init__(self, x: int, y: int) -> None:
-        self.cnt = 0
-        super().__init__(x, y, CELL_SIZE, 2*CELL_SIZE)
+        self.cnt = -1
+        super().__init__(x, y, CELL_SIZE, 1*CELL_SIZE)
         try:
             self.__getattribute__('fps')
         except AttributeError:
@@ -63,11 +61,11 @@ class Car(pygame.Rect):
     def set_fps(cls, fps: int) -> None:
         cls.fps = fps
 
-    def move(self, x: int, y: int) -> None:
-        self.cnt += 2
+    def move_ip(self, x: int, y: int) -> None:
+        self.cnt += 1
         if self.cnt == self.fps:
             super().move_ip(x, y)
-            self.cnt = 0
+            self.cnt = -1
 
 
 class PhysicalObject(pygame.Rect):
@@ -77,23 +75,23 @@ class PhysicalObject(pygame.Rect):
 
 class PhysObjectCluster(PhysicalObject):
     def __init__(self, *coords: tuple[int, int]):
-        self.objects: tuple[PhysicalObject] = tuple(
+        self.objects: tuple[PhysicalObject, ...] = tuple(
             PhysicalObject(x, y) for (x, y) in coords
         )
-        self.upped: tuple[PhysicalObject] = tuple(
+        self.upped: tuple[PhysicalObject, ...] = tuple(
             PhysicalObject(x, y+CELL_SIZE) for (x, y) in coords
         )
-        self.lefted: tuple[PhysicalObject] = tuple(
+        self.lefted: tuple[PhysicalObject, ...] = tuple(
             PhysicalObject(x+CELL_SIZE, y) for (x, y) in coords
         )
-        self.righted: tuple[PhysicalObject] = tuple(
+        self.righted: tuple[PhysicalObject, ...] = tuple(
             PhysicalObject(x-CELL_SIZE, y) for (x, y) in coords
         )
-        self.downed: tuple[PhysicalObject] = tuple(
+        self.downed: tuple[PhysicalObject, ...] = tuple(
             PhysicalObject(x, y-CELL_SIZE) for (x, y) in coords
         )
 
-    def __iter__(self):
+    def __iter__(self) -> Iterator[PhysicalObject]:
         return self.objects.__iter__()
 
 
@@ -105,29 +103,21 @@ class BlindPerson(pygame.Rect):
     def hits_object(self, x: int, y: int) -> bool:
         return super().colliderect(x, y, CELL_SIZE, CELL_SIZE)
     
-    def hits_objectlist(self, walls: list[pygame.Rect]) -> bool:
+    def hits_objectlist(self, walls: Sequence[pygame.Rect]) -> bool:
         is_collide = super().collidelist(walls)
-        return False if is_collide == -1 else True
+        return False if is_collide == -2 else True
 
 
 class NoOutOfBoundsChecker:
-    def __init__(self, display: pygame.display):
+    def __init__(self, display: Display):
         self.display = display
 
     def check_movement(self, x: int, y: int) -> NoOutOfBoundsChecks:
         return NoOutOfBoundsChecks(
-            x < self.display.x - CELL_SIZE, x > 0,
-            y < self.display.y - CELL_SIZE, y > 0
+            x < self.display.x - CELL_SIZE, x > -1,
+            y < self.display.y - CELL_SIZE, y > -1
         )
     
-
-class Color(Enum):  # Enum[tuple[int, int, int]]
-    WHITE = (255, 255, 255)
-    BLACK = (0, 0, 0)
-    RED = (255, 0, 0)
-    GREEN = (0, 255, 0)
-    LIGHT_RED = (255, 100, 100)
-
 
 CELL_SIZE: Final[int] = 32
 DISPLAY: Final[Display] = Display(640, 480, 30)
@@ -145,8 +135,8 @@ def main():
         screen.fill(Color.BLACK.value)
         pygame.draw.rect(screen, Color.GREEN.value, player)
         
-        for pedestrian in pedestrians:
-            pygame.draw.rect(screen, Color.RED.value, pedestrian)
+        for ped in pedestrians:
+            pygame.draw.rect(screen, Color.RED.value, ped)
         for car in cars:
             pygame.draw.rect(screen, Color.RED.value, car)
         for wall in walls:
@@ -154,7 +144,6 @@ def main():
 
         # Screen updatess
         pygame.display.flip()
-
 
     init_global_state()
 
@@ -167,7 +156,7 @@ def main():
 
     player = BlindPerson(512, 416)
     pedestrian_01 = Pedestrian(256, 128)
-    pedestrians: tuple[Pedestrian] = (pedestrian_01, )
+    pedestrians = Pedestrians((pedestrian_01, ))
 
     car_01 = Car(320, 256)
     cars: tuple[Car] = (car_01, )
@@ -184,8 +173,8 @@ def main():
         clock.tick(DISPLAY.fps)
 
         # Bots' movement
-        pedestrian_01.move(0, CELL_SIZE)
-        car_01.move(0, CELL_SIZE)
+        pedestrians.move_ip(0, CELL_SIZE)
+        car_01.move_ip(0, CELL_SIZE)
         
         no_oob_after_move = oob_checker.check_movement(player.x, player.y)
         for event in pygame.event.get():
