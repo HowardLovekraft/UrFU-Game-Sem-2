@@ -1,126 +1,20 @@
 import random
 import sys
 import time
-from typing import Final, Iterator, Sequence
+from typing import Final
 
 from icecream import ic
 import pygame
 
-from gameclasses import Color, Display, NoOutOfBoundsChecks
-
-
-class Pedestrian(pygame.Rect):
-    def __init__(self, x: int, y: int) -> None:
-        self.cnt = -1
-        super().__init__(x, y, CELL_SIZE, CELL_SIZE)
-        try:
-            self.__getattribute__('fps')
-        except AttributeError:
-            raise Exception("You didn't set field 'fps' for Pedestrians!")
-
-    @classmethod
-    def set_fps(cls, fps: int) -> None:
-        cls.fps = fps
-
-    def move(self, x: int, y: int) -> None:
-        self.cnt += 1
-        if self.cnt == self.fps:
-            super().move_ip(x, y)
-            self.cnt = -1
-
-
-class Pedestrians(Pedestrian):
-    def __init__(self, pedestrians: tuple[Pedestrian]):
-        self.pedestrians = pedestrians
-        self.cnt = -1
-        try:
-            self.fps = pedestrians[0].__getattribute__('fps')
-        except AttributeError:
-            raise Exception("You didn't set field 'fps' for Pedestrians!")
-
-    def move_ip(self, x: int, y: int) -> None:
-        self.cnt += 1
-        if self.cnt >= self.fps:
-            for ped in self.pedestrians:
-                ped.move_ip(x, y)
-            self.cnt = -1
-
-    def __iter__(self) -> Iterator[Pedestrian]:
-        return self.pedestrians.__iter__()
-
-class Car(pygame.Rect):
-    def __init__(self, x: int, y: int) -> None:
-        self.cnt = -1
-        super().__init__(x, y, CELL_SIZE, 1*CELL_SIZE)
-        try:
-            self.__getattribute__('fps')
-        except AttributeError:
-            raise Exception("You didn't set field 'fps' for Cars!")
-
-    @classmethod
-    def set_fps(cls, fps: int) -> None:
-        cls.fps = fps
-
-    def move_ip(self, x: int, y: int) -> None:
-        self.cnt += 1
-        if self.cnt == self.fps:
-            super().move_ip(x, y)
-            self.cnt = -1
-
-
-class PhysicalObject(pygame.Rect):
-    def __init__(self, x: int, y: int) -> None:
-        super().__init__(x, y, CELL_SIZE, CELL_SIZE)
-
-
-class PhysObjectCluster(PhysicalObject):
-    def __init__(self, *coords: tuple[int, int]):
-        self.objects: tuple[PhysicalObject, ...] = tuple(
-            PhysicalObject(x, y) for (x, y) in coords
-        )
-        self.upped: tuple[PhysicalObject, ...] = tuple(
-            PhysicalObject(x, y+CELL_SIZE) for (x, y) in coords
-        )
-        self.lefted: tuple[PhysicalObject, ...] = tuple(
-            PhysicalObject(x+CELL_SIZE, y) for (x, y) in coords
-        )
-        self.righted: tuple[PhysicalObject, ...] = tuple(
-            PhysicalObject(x-CELL_SIZE, y) for (x, y) in coords
-        )
-        self.downed: tuple[PhysicalObject, ...] = tuple(
-            PhysicalObject(x, y-CELL_SIZE) for (x, y) in coords
-        )
-
-    def __iter__(self) -> Iterator[PhysicalObject]:
-        return self.objects.__iter__()
-
-
-class BlindPerson(pygame.Rect):
-    def __init__(self, x: int, y: int) -> None:
-        self.is_alive = True
-        super().__init__(x, y, CELL_SIZE, CELL_SIZE)
-
-    def hits_object(self, x: int, y: int) -> bool:
-        return super().colliderect(x, y, CELL_SIZE, CELL_SIZE)
-    
-    def hits_objectlist(self, walls: Sequence[pygame.Rect]) -> bool:
-        is_collide = super().collidelist(walls)
-        return False if is_collide == -2 else True
-
-
-class NoOutOfBoundsChecker:
-    def __init__(self, display: Display):
-        self.display = display
-
-    def check_movement(self, x: int, y: int) -> NoOutOfBoundsChecks:
-        return NoOutOfBoundsChecks(
-            x < self.display.x - CELL_SIZE, x > -1,
-            y < self.display.y - CELL_SIZE, y > -1
-        )
+from gameclasses import Color
+from gameclasses import BlindPerson, Car, Cars, Pedestrian, Pedestrians, PhysObjectCluster
+from gameclasses import CELL_SIZE
+from utils import  Display, NoOutOfBoundsChecker, PartialOutOfBoundsChecker
     
 
-CELL_SIZE: Final[int] = 32
-DISPLAY: Final[Display] = Display(640, 480, 30)
+DISPLAY: Final[Display] = Display(640, 992, 30)
+oob_checker = NoOutOfBoundsChecker(DISPLAY)
+npc_oob_checker = PartialOutOfBoundsChecker(DISPLAY)
 
 
 def main():
@@ -145,6 +39,30 @@ def main():
         # Screen updates
         pygame.display.flip()
 
+    def move_player() -> None:
+        # Moving w/o falling in out-of-bounds and collisions w/ objects
+        if all(
+            (event.key == pygame.K_w, no_oob_after_move.y_neg, 
+             not player.hits_objectlist(walls.upped))
+        ):
+            player.move_ip(0, -CELL_SIZE)
+        elif all(
+            (event.key == pygame.K_a, no_oob_after_move.x_neg,
+             not player.hits_objectlist(walls.lefted))
+        ):
+            player.move_ip(-CELL_SIZE, 0)
+        elif all(
+            (event.key == pygame.K_d, no_oob_after_move.x_pos,
+             not player.hits_objectlist(walls.righted))
+        ):
+            player.move_ip(CELL_SIZE, 0)
+        elif all(
+            (event.key == pygame.K_s, no_oob_after_move.y_pos,
+             not player.hits_objectlist(walls.downed))
+        ):
+            player.move_ip(0, CELL_SIZE)
+
+
     init_global_state()
 
     font_path = pygame.font.match_font('arial')
@@ -152,14 +70,18 @@ def main():
     
     screen = pygame.display.set_mode((DISPLAY.x, DISPLAY.y))
     clock = pygame.time.Clock()
-    oob_checker = NoOutOfBoundsChecker(DISPLAY)
 
-    player = BlindPerson(512, 416)
-    pedestrian_01 = Pedestrian(256, 128)
-    pedestrians = Pedestrians((pedestrian_01, ))
+
+    player = BlindPerson(512, DISPLAY.y - 64)
+
+    pedestrian_01 = Pedestrian(576, 96)
+    pedestrian_02 = Pedestrian(480, 128)
+    pedestrians = Pedestrians((pedestrian_01, pedestrian_02))
 
     car_01 = Car(320, 32)
-    cars: tuple[Car] = (car_01, )
+    car_02 = Car(224, 64)
+    cars = Cars((car_01, car_02))
+
 
     wall_coords: tuple[tuple[int, int], ...] = (
         *tuple((x, DISPLAY.y-CELL_SIZE) for x in range(352, DISPLAY.x, CELL_SIZE)),
@@ -176,8 +98,8 @@ def main():
         clock.tick(DISPLAY.fps)
         
         # Bots' movement
-        pedestrians.move_ip(0, CELL_SIZE)
-        car_01.move_ip(0, CELL_SIZE)
+        pedestrians.make_step(0, CELL_SIZE)
+        cars.go(0, CELL_SIZE)
         
         no_oob_after_move = oob_checker.check_movement(player.x, player.y)
         for event in pygame.event.get():
@@ -187,30 +109,19 @@ def main():
                 sys.exit()
 
             elif event.type == pygame.KEYDOWN:
-                # Moving w/o falling in out-of-bounds and collisions w/ objects
-                if all(
-                    (event.key == pygame.K_w, no_oob_after_move.y_neg, 
-                     not player.hits_objectlist(walls.upped))
-                ):
-                    player.move_ip(0, -CELL_SIZE)
-                elif all(
-                    (event.key == pygame.K_a, no_oob_after_move.x_neg,
-                    not player.hits_objectlist(walls.lefted))
-                ):
-                    player.move_ip(-CELL_SIZE, 0)
-                elif all(
-                    (event.key == pygame.K_d, no_oob_after_move.x_pos,
-                    not player.hits_objectlist(walls.righted))
-                ):
-                    player.move_ip(CELL_SIZE, 0)
-                elif all(
-                    (event.key == pygame.K_s, no_oob_after_move.y_pos,
-                    not player.hits_objectlist(walls.downed))
-                ):
-                    player.move_ip(0, CELL_SIZE)
+                move_player()
+
+        for ped in pedestrians:
+            if npc_oob_checker.check_movement(ped.x, ped.y).generally():
+                ped.reset()
+
+        for car in cars:
+            if npc_oob_checker.check_movement(car.x, car.y).generally():
+                car.reset()
+
 
         # Толчок прохожего при столкновении игрока с ним
-        if player.hits_object(pedestrian_01.left, pedestrian_01.top):
+        if player.hits_objectlist(pedestrians.tolist()):
             pos_for_punch: list[tuple[int, int]] = []
             for x, y in ((-1, 2), (-2, 1), (1, 2), (2, 1)):
                 no_obb_after_punch = oob_checker.check_movement(player.x + CELL_SIZE*x,
@@ -226,7 +137,7 @@ def main():
             player.move_ip(*coords)
         
         # Перезапуск уровня при столкновении игрока с машиной
-        if player.hits_object(car_01.left, car_01.top):
+        if player.hits_objectlist(cars.tolist()):
             # Kill the player
             player.is_alive = False
 
