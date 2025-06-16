@@ -3,33 +3,23 @@ from typing import Iterator, Sequence
 
 import pygame
 
-from config_reader import CELL_SIZE
+from classes.abstracts import Entity_1x1, EntityFreezed_1x1, Entity_1x2
+from config.cfg_reader import CELL_SIZE
 
-
-class Entity_1x1(pygame.Rect):
-    def __init__(self, x: int, y: int) -> None:
-        self.init_x = x
-        self.init_y = y
-        super().__init__(x, y, CELL_SIZE, CELL_SIZE)
-
-    def reset(self) -> None:
-        self.update(self.init_x, self.init_y, CELL_SIZE, CELL_SIZE)
-
-
-class Entity_1x2(pygame.Rect):
-    def __init__(self, x: int, y: int) -> None:
-        self.init_x = x
-        self.init_y = y
-        super().__init__(x, y, CELL_SIZE, 2*CELL_SIZE)
-
-    def reset(self) -> None:
-        self.update(self.init_x, self.init_y, CELL_SIZE, 2*CELL_SIZE)
+    
+class Color(Enum):  # Enum[tuple[int, int, int]]
+    WHITE = (254, 255, 255)
+    BLACK = (0, 0, 0)
+    RED = (254, 0, 0)
+    GREEN = (0, 255, 0)
+    LIGHT_RED = (254, 100, 100)
+    YELLOW = (255, 222, 33)
 
 
 class Pedestrian(Entity_1x1):
-    def __init__(self, x: int, y: int) -> None:
+    def __init__(self, x: int, y: int, movement_x: int, movement_y: int) -> None:
         self.cnt = -1
-        super().__init__(x, y)
+        super().__init__(x, y, movement_x, movement_y)
         try:
             self.__getattribute__('fps')
         except AttributeError:
@@ -44,8 +34,9 @@ class Pedestrian(Entity_1x1):
 
 
 class Pedestrians(Pedestrian):
-    def __init__(self, pedestrians: Sequence[Pedestrian]):
-        self.pedestrians = pedestrians
+    def __init__(self, pedestrians: list[Pedestrian]):
+        self.pedestrians = sorted(pedestrians, key=lambda x: (x.x, x.y))
+        print(self.pedestrians)
         self.cnt = -1
         try:
             self.fps = pedestrians[0].__getattribute__('fps')
@@ -57,15 +48,33 @@ class Pedestrians(Pedestrian):
         self.cnt += 1
         if self.cnt >= self.fps:
             for ped in self.pedestrians:
-                ped.move_ip(x, y)
+                ped.move_ip(ped.movement_x, ped.movement_y)
             self.cnt = -1
 
     def __iter__(self) -> Iterator[Pedestrian]:
         return self.pedestrians.__iter__()
     
     def tolist(self) -> list[Pedestrian]:
-        return list(self.pedestrians)
-
+        return self.pedestrians
+    
+    def _find_ped_by_coords(self, to_find: tuple[int, int]) -> int:
+        src_array = self.pedestrians
+        array_len = len(src_array)
+        if array_len == 0:
+            return -1
+        
+        for i in range(array_len):
+            ped = src_array[i]
+            if ped.x == to_find[0] and ped.y == to_find[1]:
+                return i
+    
+    
+    def remove(self, x: int, y: int) -> None:
+        """Removes pedestrian with coordinates (x, y)."""
+        print('FUCK!')
+        ind = self._find_ped_by_coords((x, y))
+        print(x, y, ind)
+        self.pedestrians.pop(ind)
 
 class Car(Entity_1x2):
     def __init__(self, x: int, y: int) -> None:
@@ -92,7 +101,7 @@ class Cars(Car):
 
     def go(self, x: int, y: int) -> None:
         """Wrapper for `car.move()` method."""
-        self.cnt += 4
+        self.cnt += 5
         if self.cnt >= self.fps:
             for car in self.cars:
                 car.move_ip(x, y)
@@ -105,10 +114,22 @@ class Cars(Car):
         return list(self.cars)
 
 
+class PhysicalObject(EntityFreezed_1x1):
+    pass
 
-class PhysicalObject(pygame.Rect):
-    def __init__(self, x: int, y: int) -> None:
-        super().__init__(x, y, CELL_SIZE, CELL_SIZE)
+
+class TactileTile(PhysicalObject):
+    pass
+
+class TactileTiles(TactileTile):
+    def __init__(self, tiles: Sequence[TactileTile]) -> None:
+        self.tiles = tiles
+        
+    def tolist(self) -> list[TactileTile]:
+        return list(self.tiles)
+    
+    def __iter__(self) -> Iterator[TactileTile]:
+        return self.tiles.__iter__()
 
 
 class PhysObjectCluster(PhysicalObject):
@@ -129,13 +150,17 @@ class PhysObjectCluster(PhysicalObject):
             PhysicalObject(x, y-CELL_SIZE) for (x, y) in coords
         )
 
+    def tolist(self) -> list[PhysicalObject]:
+        return list(self.objects)
+
     def __iter__(self) -> Iterator[PhysicalObject]:
         return self.objects.__iter__()
 
 
-class BlindPerson(pygame.Rect):
+class BlindPerson(Entity_1x1):
     def __init__(self, x: int, y: int) -> None:
-        self.is_alive = True
+        self.is_alive: bool = True
+        self.is_on_tactile: bool = False
         super().__init__(x, y, CELL_SIZE, CELL_SIZE)
 
     def hits_object(self, x: int, y: int) -> bool:
@@ -144,11 +169,3 @@ class BlindPerson(pygame.Rect):
     def hits_objectlist(self, walls: Sequence[pygame.Rect]) -> bool:
         is_collide = super().collidelist(walls)
         return False if is_collide == -1 else True
-    
-
-class Color(Enum):  # Enum[tuple[int, int, int]]
-    WHITE = (254, 255, 255)
-    BLACK = (0, 0, 0)
-    RED = (254, 0, 0)
-    GREEN = (0, 255, 0)
-    LIGHT_RED = (254, 100, 100)

@@ -6,15 +6,17 @@ from typing import Final
 from icecream import ic
 import pygame
 
-from gameclasses import Color
-from gameclasses import BlindPerson, Car, Cars, Pedestrian, Pedestrians, PhysObjectCluster
-from gameclasses import CELL_SIZE
+from classes.gameclasses import Color
+from classes.gameclasses import BlindPerson, Car, Cars, Pedestrian, Pedestrians
+from classes.gameclasses import PhysObjectCluster, TactileTile, TactileTiles
+from classes.abstracts import CELL_SIZE
 from utils import  Display, NoOutOfBoundsChecker, PartialOutOfBoundsChecker
     
 
 DISPLAY: Final[Display] = Display(640, 992, 30)
 oob_checker = NoOutOfBoundsChecker(DISPLAY)
 npc_oob_checker = PartialOutOfBoundsChecker(DISPLAY)
+
 
 
 def main():
@@ -27,15 +29,17 @@ def main():
     def render_frame() -> None:
         """Renders the frame."""
         screen.fill(Color.BLACK.value)
-        pygame.draw.rect(screen, Color.GREEN.value, player)
         
+        for tactile in tactile_tiles:
+            pygame.draw.rect(screen, Color.YELLOW.value, tactile)
         for ped in pedestrians:
             pygame.draw.rect(screen, Color.RED.value, ped)
         for car in cars:
             pygame.draw.rect(screen, Color.RED.value, car)
         for wall in walls:
             pygame.draw.rect(screen, Color.WHITE.value, wall)
-
+            
+        pygame.draw.rect(screen, Color.GREEN.value, player)
         # Screen updates
         pygame.display.flip()
 
@@ -72,26 +76,44 @@ def main():
     clock = pygame.time.Clock()
 
 
-    player = BlindPerson(512, DISPLAY.y - 64)
+    player = BlindPerson(512, DISPLAY.y - 2*CELL_SIZE)
+    npc: list = []
 
-    pedestrian_01 = Pedestrian(576, 96)
-    pedestrian_02 = Pedestrian(480, 128)
-    pedestrians = Pedestrians((pedestrian_01, pedestrian_02))
+    pedestrians = Pedestrians(
+        [
+            Pedestrian(576, 96, 0, 32), 
+            Pedestrian(480, 128, 0, 32),
+            *[Pedestrian(x, y, 0, 0) for x in range(384, 608+1, CELL_SIZE) for y in range(352, 480+1, CELL_SIZE)]
+        ]
+    )
 
-    car_01 = Car(320, 32)
-    car_02 = Car(224, 64)
-    cars = Cars((car_01, car_02))
+    cars = Cars(
+        (
+            Car(224, 64), Car(320, 32)
+        )
+    )
+
+    tactile_tiles = TactileTiles((
+        *tuple(TactileTile(448, y) for y in range(352, 448, CELL_SIZE)),
+        *tuple(TactileTile(x, 416) for x in range(480, 544, CELL_SIZE)),
+        *tuple(TactileTile(512, y) for y in range(416, 513, CELL_SIZE))
+    ))
 
 
     wall_coords: tuple[tuple[int, int], ...] = (
-        *tuple((x, DISPLAY.y-CELL_SIZE) for x in range(352, DISPLAY.x, CELL_SIZE)),
-        *tuple((352, y) for y in range(128, DISPLAY.y, CELL_SIZE)),
+        *tuple((352, y) for y in range(0, 224, CELL_SIZE)),
+        *tuple((352, y) for y in range(320, DISPLAY.y, CELL_SIZE)),
         *tuple((0, y) for y in range(0, DISPLAY.y, CELL_SIZE)),
         *tuple((160, y) for y in range(128, DISPLAY.y, CELL_SIZE)),
+        *tuple((x, DISPLAY.y-CELL_SIZE) for x in range(352, DISPLAY.x, CELL_SIZE)),
         *tuple((x, DISPLAY.y-CELL_SIZE) for x in range(0, 160, CELL_SIZE)),
-        (128, 128), (96, 128), (256, 256), 
+        *tuple((x, 224) for x in range(352, DISPLAY.x, CELL_SIZE)),
+        (128, 128), (96, 128), (256, 256)
     )
     walls = PhysObjectCluster(*wall_coords)
+
+    npc.extend(pedestrians.tolist())
+    npc.extend(walls.tolist())
 
     while True:
         print(player.x, player.y)  # DEBUG-ONLY
@@ -161,6 +183,14 @@ def main():
             # To restart the game I use recursion. :(
             # I will fix it later.
             main()  # Rate this pattern from 1 to -255
+
+        if player.is_on_tactile == False and player.hits_objectlist(tactile_tiles.tolist()):
+            player.is_on_tactile = True
+            _coords = [(448, y) for y in range(352, 448, CELL_SIZE)] + \
+                [(x, 416) for x in range(480, 544, CELL_SIZE)] + \
+                [(512, y) for y in range(448, 512, CELL_SIZE)]
+            for coord in _coords:
+                pedestrians.remove(*coord)
 
         if player.is_alive: 
             render_frame()

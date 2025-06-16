@@ -1,6 +1,8 @@
 from dataclasses import dataclass
+from enum import Enum
 
-from config_reader import CELL_SIZE
+from config.cfg_reader import CELL_SIZE
+from classes.abstracts import EntityFreezed_1x1
 
 
 @dataclass(frozen=True, slots=True)
@@ -12,9 +14,7 @@ class Display:
 
 @dataclass(frozen=True, slots=True)
 class NoOutOfBoundsChecks:
-    """
-    Container for results of out-of-bounds checks.
-    """
+    """Container for results of out-of-bounds checks."""
     x_pos: bool
     x_neg: bool
     y_pos: bool
@@ -38,8 +38,11 @@ class NoOutOfBoundsChecker:
 
     def check_movement(self, x: int, y: int) -> NoOutOfBoundsChecks:
         return NoOutOfBoundsChecks(
-            x < self.display.x - CELL_SIZE, x > -1,
-            y < self.display.y - CELL_SIZE, y > -1
+            (x < self.display.x - CELL_SIZE), 
+            x > -1,
+            y < self.display.y - CELL_SIZE, 
+            y > -1,
+            
         )
     
 
