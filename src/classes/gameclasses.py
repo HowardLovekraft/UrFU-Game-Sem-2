@@ -29,9 +29,6 @@ class Pedestrian(Entity_1x1):
     def set_fps(cls, fps: int) -> None:
         cls.fps = fps
 
-    def reset(self) -> None:
-        self.update(self.init_x, self.init_y, CELL_SIZE, CELL_SIZE)
-
 
 class Pedestrians(Pedestrian):
     def __init__(self, pedestrians: list[Pedestrian]):
@@ -54,6 +51,10 @@ class Pedestrians(Pedestrian):
     def __iter__(self) -> Iterator[Pedestrian]:
         return self.pedestrians.__iter__()
     
+    def reset(self) -> None:
+        for ped in self.pedestrians:
+            ped.reset()
+    
     def tolist(self) -> list[Pedestrian]:
         return self.pedestrians
     
@@ -63,6 +64,7 @@ class Pedestrians(Pedestrian):
         if array_len == 0:
             return -1
         
+        # Linear Search
         for i in range(array_len):
             ped = src_array[i]
             if ped.x == to_find[0] and ped.y == to_find[1]:
@@ -112,6 +114,10 @@ class Cars(Car):
     
     def tolist(self) -> list[Car]:
         return list(self.cars)
+    
+    def reset(self) -> None:
+        for car in self.cars:
+            car.reset()
 
 
 class PhysicalObject(EntityFreezed_1x1):
@@ -129,6 +135,20 @@ class TactileTiles(TactileTile):
         return list(self.tiles)
     
     def __iter__(self) -> Iterator[TactileTile]:
+        return self.tiles.__iter__()
+
+
+class HospitalTile(EntityFreezed_1x1):
+    pass
+
+class HospitalTiles(HospitalTile):
+    def __init__(self, tiles: Sequence[HospitalTile]) -> None:
+        self.tiles = tiles
+        
+    def tolist(self) -> list[HospitalTile]:
+        return list(self.tiles)
+    
+    def __iter__(self) -> Iterator[HospitalTile]:
         return self.tiles.__iter__()
 
 
@@ -161,6 +181,7 @@ class BlindPerson(Entity_1x1):
     def __init__(self, x: int, y: int) -> None:
         self.is_alive: bool = True
         self.is_on_tactile: bool = False
+        self.is_won: bool = False
         super().__init__(x, y, CELL_SIZE, CELL_SIZE)
 
     def hits_object(self, x: int, y: int) -> bool:
