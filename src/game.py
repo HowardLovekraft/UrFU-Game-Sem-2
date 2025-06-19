@@ -7,7 +7,8 @@ import pygame
 from config.cfg_reader import CELL_SIZE
 from classes.base_entities import Color
 from classes.single_entities import BlindPerson, Car, Pedestrian, TactileTile, HospitalTile, Wall
-from classes.group_entities import Cars, Pedestrians, HospitalTiles, TactileTiles, WallCluster, StaticPedestrians
+from classes.group_entities import Cars, Pedestrians, HospitalTiles
+from classes.group_entities import TactileTiles, WallCluster, StaticPedestrians, ObjectsRenderer
 from utils import  Display, NoOutOfBoundsChecker, PartialOutOfBoundsChecker
     
 
@@ -64,13 +65,7 @@ def main():
         screen.fill(Color.BLACK.value)
         field.fill(Color.BLACK.value)
         
-        tactile_tiles.render()
-        pedestrians.render()
-        static_pedestrians.render()
-        cars.render()
-        walls.render()
-        hospital.render()
-        player.render()
+        object_renderer.render(player)
         # Screen updates
         screen.blit(field, (-320+(LEVEL_SIZE[0]-player.x), -720 +(LEVEL_SIZE[1]-player.y)))
         pygame.display.flip()
@@ -211,6 +206,22 @@ def main():
             HospitalTile(x, y) for x in range(32, 170, CELL_SIZE) for y in range(0, 32+1, CELL_SIZE)
         )
     )
+    
+    object_renderer = ObjectsRenderer()
+    object_renderer.add_entity(player)
+    for ped in pedestrians:
+        object_renderer.add_entity(ped)
+    for ped in static_pedestrians:
+        object_renderer.add_entity(ped)
+    for car in cars:
+        object_renderer.add_entity(car)
+    for tile in tactile_tiles:
+        object_renderer.add_entity(tile)
+    for wall in walls:
+        object_renderer.add_entity(wall)
+    for tile in hospital:
+        object_renderer.add_entity(tile)
+
 
     is_start_game: bool = True
     while True:
@@ -265,7 +276,7 @@ def main():
                     is_start_game = False
 
         elif not player.is_won:
-            print(player.x, player.y)  # DEBUG-ONLY
+            print('Player coords:', player.x, player.y)
             clock.tick(DISPLAY.fps)
             
             # Bots' movement

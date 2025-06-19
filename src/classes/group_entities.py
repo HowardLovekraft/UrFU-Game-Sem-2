@@ -1,6 +1,10 @@
 from typing import Iterator, Sequence
 
-from classes.single_entities import Car, HospitalTile, Pedestrian, Wall, TactileTile, StaticPedestrian
+import pygame
+
+from classes.base_entities import EntityCluster, EntityFreezed
+from classes.single_entities import Car, HospitalTile, Pedestrian, Wall
+from classes.single_entities import TactileTile, StaticPedestrian, BlindPerson
 from config.cfg_reader import CELL_SIZE
 
 
@@ -42,9 +46,7 @@ class Pedestrians(Pedestrian):
     
     def remove(self, x: int, y: int) -> None:
         """Removes pedestrian with coordinates (x, y)."""
-        print('FUCK!')
         ind = self._find_ped_by_coords((x, y))
-        print(x, y, ind)
         self.pedestrians.pop(ind)
 
     def render(self) -> None:
@@ -78,9 +80,7 @@ class StaticPedestrians(StaticPedestrian):
     
     def remove(self, x: int, y: int) -> None:
         """Removes pedestrian with coordinates (x, y)."""
-        print('FUCK!')
         ind = self._find_ped_by_coords((x, y))
-        print(x, y, ind)
         self.pedestrians.pop(ind)
 
     def render(self) -> None:
@@ -173,3 +173,20 @@ class WallCluster(Wall):
     def render(self) -> None:
         for object_ in self.objects:
             object_.render()
+
+
+class ObjectsRenderer(EntityCluster):
+    def __init__(self, entities: Sequence[EntityFreezed] = []):
+        super().__init__(entities)
+    
+    def render(self, player: BlindPerson) -> None:
+        coords_to_render = tuple(
+            (player.x+x*CELL_SIZE, player.y+y*CELL_SIZE) 
+            for x in (-3, -2, -1, 0, 1, 2, 3) for y in (-3, -2, -1, 0, 1, 2, 3)
+        )
+        entities_to_render = [
+            entity for entity in self.entities if (entity.x, entity.y) in coords_to_render
+        ]
+        for entity in entities_to_render:
+            entity.render()
+        player.render()

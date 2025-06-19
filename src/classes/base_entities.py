@@ -87,12 +87,11 @@ class Entity_1x2(Entity):
 
 
 class EntityCluster(EntityFreezed):
-    def __init__(self, entities: Sequence):
+    def __init__(self, entities: Sequence = []):
         self.entities: list = list(entities)
 
     def add_entity(self, entity) -> None:
         self.entities.append(entity)
 
     def render(self) -> None:
-        for entity in self.entities:
-            entity.render()
+        raise NotImplementedError
