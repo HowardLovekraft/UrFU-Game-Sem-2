@@ -4,7 +4,7 @@
 игроку придётся полагаться на слух главного героя и трость.
 
 # Как установить игру
-## Через [`uv`](https://github.com/HowardLovekraft/UrFU-Game-Sem-2) (не зависит от ОС):
+## Через [`uv`](https://github.com/astral-sh/uv) (не зависит от ОС):
 1. Скачайте репозиторий:  
 `git clone https://github.com/HowardLovekraft/UrFU-Game-Sem-2`
 2. Установите виртуальное окружение (в директории репозитория "UrFU-Game-Sem-2/"):  
