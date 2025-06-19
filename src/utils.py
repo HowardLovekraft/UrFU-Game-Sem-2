@@ -2,7 +2,7 @@ from dataclasses import dataclass
 from enum import Enum
 
 from config.cfg_reader import CELL_SIZE
-from classes.abstracts import EntityFreezed_1x1
+from classes.base_entities import EntityFreezed_1x1
 
 
 @dataclass(frozen=True, slots=True)
@@ -25,9 +25,7 @@ class NoOutOfBoundsChecks:
 
 
 class PartialOutOfBoundsChecks(NoOutOfBoundsChecks):
-    """
-    Container for results of "partial out-of-bounds" checks.
-    """
+    """Container for results of "partial out-of-bounds" checks."""
     def generally(self) -> bool:
         return self.x_pos or self.x_neg or self.y_pos or self.y_neg
 

@@ -1,4 +1,5 @@
 from enum import Enum
+from typing import Sequence
 
 import pygame
 
@@ -83,3 +84,15 @@ class Entity_1x1(Entity):
 class Entity_1x2(Entity):
     def __init__(self, x: int, y: int, movement_x: int, movement_y: int) -> None:
         super().__init__(x, y, CELL_SIZE, 2*CELL_SIZE, movement_x, movement_y)
+
+
+class EntityCluster(EntityFreezed):
+    def __init__(self, entities: Sequence):
+        self.entities: list = list(entities)
+
+    def add_entity(self, entity) -> None:
+        self.entities.append(entity)
+
+    def render(self) -> None:
+        for entity in self.entities:
+            entity.render()

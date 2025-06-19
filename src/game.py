@@ -1,26 +1,37 @@
 import random
 import sys
-from typing import Final
+from typing import Final, NamedTuple
 
 import pygame
 
-from classes.abstracts import Color
-from classes.gameclasses import BlindPerson, Car, Cars, Pedestrian, Pedestrians
-from classes.gameclasses import PhysObjectCluster, TactileTile, TactileTiles, PhysicalObject
-from classes.gameclasses import HospitalTile, HospitalTiles
-from classes.abstracts import CELL_SIZE
+from config.cfg_reader import CELL_SIZE
+from classes.base_entities import Color
+from classes.single_entities import BlindPerson, Car, Pedestrian, TactileTile, HospitalTile, Wall
+from classes.group_entities import Cars, Pedestrians, HospitalTiles, TactileTiles, WallCluster, StaticPedestrians
 from utils import  Display, NoOutOfBoundsChecker, PartialOutOfBoundsChecker
     
 
-WINDOW_SIZE = (20*CELL_SIZE, 21*CELL_SIZE)
-LEVEL_SIZE = (20*CELL_SIZE, 31*CELL_SIZE)
+class Resolution(NamedTuple):
+    width: int
+    height: int
+
+
+class CollisionChecker:
+    def __init__(self, surface: pygame.Surface):
+        self.surface = surface
+
+
+WINDOW_SIZE = Resolution(20*CELL_SIZE, 21*CELL_SIZE)
+LEVEL_SIZE = Resolution(20*CELL_SIZE, 31*CELL_SIZE)
 DISPLAY: Final[Display] = Display(*LEVEL_SIZE, 30)
 oob_checker = NoOutOfBoundsChecker(DISPLAY)
 npc_oob_checker = PartialOutOfBoundsChecker(DISPLAY)
 
 
 def main():
-    def init_global_state() -> None: 
+    def init_global_state(resolution: Resolution) -> pygame.Surface:
+        field = pygame.Surface(resolution)
+
         Pedestrian.set_fps(DISPLAY.fps)
         Pedestrian.set_color(Color.RED)
         Pedestrian.set_surface(field)
@@ -29,8 +40,8 @@ def main():
         Car.set_color(Color.RED)
         Car.set_surface(field)
 
-        PhysicalObject.set_color(Color.WHITE)
-        PhysicalObject.set_surface(field)
+        Wall.set_color(Color.WHITE)
+        Wall.set_surface(field)
 
         TactileTile.set_color(Color.YELLOW)
         TactileTile.set_surface(field)
@@ -45,6 +56,9 @@ def main():
         pygame.init()
         pygame.font.init()
 
+        return field
+
+
     def render_frame() -> None:
         """Renders the frame."""
         screen.fill(Color.BLACK.value)
@@ -52,6 +66,7 @@ def main():
         
         tactile_tiles.render()
         pedestrians.render()
+        static_pedestrians.render()
         cars.render()
         walls.render()
         hospital.render()
@@ -59,6 +74,7 @@ def main():
         # Screen updates
         screen.blit(field, (-320+(LEVEL_SIZE[0]-player.x), -720 +(LEVEL_SIZE[1]-player.y)))
         pygame.display.flip()
+
 
     def move_player() -> None:
         # Moving w/o falling in out-of-bounds and collisions w/ objects
@@ -83,6 +99,7 @@ def main():
         ):
             player.move_ip(0, CELL_SIZE)
 
+
     def finish_game() -> None:
         clock.tick(DISPLAY.fps)
         for event in pygame.event.get():
@@ -99,15 +116,18 @@ def main():
         screen.blit(field, (0, 0))
         pygame.display.flip()
 
+
     def render_text(text: str, x: int, y: int) -> None:
         text_to_render = arial_font.render(text, 1, Color.LIGHT_RED.value)
         field.blit(text_to_render, (x, y))
+
 
     def restart_game() -> None:
         player.is_alive = True
         player.reset()
         pedestrians.reset()
         car.reset()
+
 
     def lose_game() -> None:
         # Kill the player
@@ -133,8 +153,7 @@ def main():
             pygame.time.wait(990)
 
 
-    field = pygame.Surface(LEVEL_SIZE)
-    init_global_state()
+    field = init_global_state(LEVEL_SIZE)
 
     font_path = pygame.font.match_font('arial')
     arial_font = pygame.font.Font(font_path, 25)
@@ -143,7 +162,6 @@ def main():
     clock = pygame.time.Clock()
 
     player = BlindPerson(16*CELL_SIZE, 31*CELL_SIZE - 2*CELL_SIZE)
-    npc: list = []
 
     pedestrians = Pedestrians(
         [
@@ -153,15 +171,18 @@ def main():
             Pedestrian(512, 480, 0, CELL_SIZE),
             Pedestrian(576, 512, 0, CELL_SIZE),
             Pedestrian(160, 64, 0, CELL_SIZE),
-            Pedestrian(96, 32, 0, CELL_SIZE),
-            *[Pedestrian(x, y, 0, 0) for x in range(384, 608+1, CELL_SIZE) for y in range(352, 480+1, CELL_SIZE)]
+            Pedestrian(96, 32, 0, CELL_SIZE)
         ]
+    )
+
+    static_pedestrians = StaticPedestrians(
+        [(x, y) for x in range(384, 608+1, CELL_SIZE) for y in range(352, 480+1, CELL_SIZE)]
     )
 
     cars = Cars(
         (
-            Car(224, 64, 0, CELL_SIZE), Car(320, 32, 0, CELL_SIZE),
-            Car(256, 896, 0, -CELL_SIZE)
+            Car(224, 64, 0, CELL_SIZE), Car(288, 32, 0, CELL_SIZE),
+            Car(256, 896, 0, -CELL_SIZE), Car(320, 896, 0, -2*CELL_SIZE)
         )
     )
 
@@ -183,16 +204,13 @@ def main():
         *tuple((x, 30*CELL_SIZE) for x in range(0, 640, CELL_SIZE)),
         *tuple((x, 224) for x in range(352, DISPLAY.x, CELL_SIZE))
     )
-    walls = PhysObjectCluster(*wall_coords)
+    walls = WallCluster(*wall_coords)
 
     hospital = HospitalTiles(
         tuple(
             HospitalTile(x, y) for x in range(32, 170, CELL_SIZE) for y in range(0, 32+1, CELL_SIZE)
         )
     )
-
-    npc.extend(pedestrians.tolist())
-    npc.extend(walls.tolist())
 
     is_start_game: bool = True
     while True:
@@ -205,7 +223,7 @@ def main():
 
             ped = Pedestrian(ICON_X, 3*CELL_SIZE, 0, 0)
             player_ = BlindPerson(ICON_X, 4*CELL_SIZE)
-            wall = PhysicalObject(ICON_X, 5*CELL_SIZE)
+            wall = Wall(ICON_X, 5*CELL_SIZE)
             car = Car(ICON_X, 6*CELL_SIZE, 0, 0)
             tactile = TactileTile(ICON_X, 8.5*CELL_SIZE)
             hospital_ = HospitalTile(ICON_X, 10*CELL_SIZE)
@@ -218,7 +236,7 @@ def main():
             pygame.draw.rect(field, Color.WHITE.value, wall)
             render_text('Физический объект. Через него нельзя пройти.', TEXT_X, 5*CELL_SIZE)
             pygame.draw.rect(field, Color.RED.value, car)
-            render_text('Автотранспорт. В исекай не отправляет :(', TEXT_X, 6.5*CELL_SIZE)
+            render_text('Автотранспорт. Сбивает насмерть :(', TEXT_X, 6.5*CELL_SIZE)
             pygame.draw.rect(field, Color.YELLOW.value, tactile)
             render_text('Тактильное покрытие. Позволяет ориентироваться ', TEXT_X, 8*CELL_SIZE)
             render_text('на улице.', TEXT_X, 9*CELL_SIZE)
@@ -251,8 +269,8 @@ def main():
             clock.tick(DISPLAY.fps)
             
             # Bots' movement
-            pedestrians.make_step(0, CELL_SIZE)
-            cars.go()
+            pedestrians.make_move()
+            cars.make_move()
             
             no_oob_after_move = oob_checker.check_movement(player.x, player.y)
             for event in pygame.event.get():
@@ -274,11 +292,12 @@ def main():
 
 
             # Толчок прохожего при столкновении игрока с ним
-            if player.hits_objectlist(pedestrians.tolist()):
+            if player.hits_objectlist(pedestrians.tolist() + static_pedestrians.tolist()):
                 pos_for_punch: list[tuple[int, int]] = []
                 for x, y in ((-1, 2), (-2, 1), (1, 2), (2, 1)):
-                    no_obb_after_punch = oob_checker.check_movement(player.x + CELL_SIZE*x,
-                                                                    player.y + CELL_SIZE*y)
+                    new_x = player.x + 32*x
+                    new_y = player.y + 32*y
+                    no_obb_after_punch = oob_checker.check_movement(new_x, new_y)
                     if all(
                         (no_obb_after_punch.x_neg, no_obb_after_punch.x_pos, no_obb_after_punch.y_pos)
                     ):
@@ -288,6 +307,7 @@ def main():
                     pos_for_punch.append((0, 1))
                 coords = random.choice(pos_for_punch)
                 player.move_ip(*coords)
+
             
             # Перезапуск уровня при столкновении игрока с машиной
             if player.hits_objectlist(cars.tolist()):
@@ -300,7 +320,7 @@ def main():
                     [(x, 416) for x in range(15*CELL_SIZE, 17*CELL_SIZE, CELL_SIZE)] + \
                     [(512, y) for y in range(14*CELL_SIZE, 16*CELL_SIZE, CELL_SIZE)]
                 for coord in _coords:
-                    pedestrians.remove(*coord)
+                    static_pedestrians.remove(*coord)
 
 
             if player.hits_objectlist(hospital.tolist()):
